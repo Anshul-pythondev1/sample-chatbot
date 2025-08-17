@@ -1,0 +1,28 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin: 20px;
+}
+.chatbox {
+    margin-top: 20px;
+    border: 1px solid #ddd;
+    padding: 10px;
+    width: 60%;
+    margin-left: auto;
+    margin-right: auto;
+}
+#chatlog {
+    height: 300px;
+    overflow-y: auto;
+    text-align: left;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 10px;
+}
+#userInput {
+    width: 70%;
+    padding: 5px;
+}
+button {
+    padding: 5px 10px;
+    margin: 5px;
+}

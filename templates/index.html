@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Chatbot</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h2>📄 PDF Chatbot</h2>
+
+    <!-- File Upload -->
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <button type="submit">Upload PDF</button>
+    </form>
+    <p id="uploadStatus"></p>
+
+    <!-- Chat Section -->
+    <div class="chatbox">
+        <div id="chatlog"></div>
+        <input type="text" id="userInput" placeholder="Ask a question...">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        // Upload PDF
+        document.getElementById("uploadForm").onsubmit = async (e) => {
+            e.preventDefault();
+            let formData = new FormData(e.target);
+            let res = await fetch("/upload", {method: "POST", body: formData});
+            let data = await res.json();
+            document.getElementById("uploadStatus").innerText = data.message || data.error;
+        };
+
+        // Chat
+        async function sendMessage() {
+            let input = document.getElementById("userInput");
+            let question = input.value;
+            if (!question) return;
+
+            let chatlog = document.getElementById("chatlog");
+            chatlog.innerHTML += `<p><b>You:</b> ${question}</p>`;
+            input.value = "";
+
+            let res = await fetch("/chat", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({question})
+            });
+            let data = await res.json();
+            chatlog.innerHTML += `<p><b>Bot:</b> ${data.answer}</p>`;
+        }
+    </script>
+</body>
+</html>
