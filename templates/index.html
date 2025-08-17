@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!-- <!DOCTYPE html>
 <html>
 <head>
     <title>PDF Chatbot</title>
@@ -7,14 +7,14 @@
 <body>
     <h2>📄 PDF Chatbot</h2>
 
-    <!-- File Upload -->
+    
     <form id="uploadForm" enctype="multipart/form-data">
         <input type="file" name="file" required>
         <button type="submit">Upload PDF</button>
     </form>
     <p id="uploadStatus"></p>
 
-    <!-- Chat Section -->
+    
     <div class="chatbox">
         <div id="chatlog"></div>
         <input type="text" id="userInput" placeholder="Ask a question...">
@@ -51,4 +51,245 @@
         }
     </script>
 </body>
+</html>  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDF Chatbot</title>
+  <!-- Cache-bust with ?v=2 so new CSS shows up on Render -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
+</head>
+<body>
+  <div class="page">
+    <header class="header glass">
+      <div class="brand">
+        <div class="logo">🤖</div>
+        <div class="brand-text">
+          <h1>PDF Chatbot</h1>
+          <p class="muted">Upload a PDF and ask anything from it.</p>
+        </div>
+      </div>
+      <nav class="actions">
+        <a class="btn ghost" href="https://github.com" target="_blank" rel="noreferrer">GitHub</a>
+        <a class="btn solid" href="#" id="healthCheck">Health</a>
+      </nav>
+    </header>
+
+    <main class="grid">
+      <!-- Upload Card -->
+      <section class="card glass" aria-labelledby="upload-title">
+        <h2 id="upload-title">1) Upload your PDF</h2>
+        <p class="muted">Drag & drop, or click to choose a file (PDF only).</p>
+
+        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Upload a PDF">
+          <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 16V4m0 0l-3.5 3.5M12 4l3.5 3.5M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+          </svg>
+          <span id="dzText">Drop PDF here or click to upload</span>
+          <input id="fileInput" type="file" accept="application/pdf" hidden />
+        </div>
+
+        <div class="row">
+          <button id="uploadBtn" class="btn solid" disabled>Upload</button>
+          <span id="uploadStatus" class="status"></span>
+        </div>
+      </section>
+
+      <!-- Chat Card -->
+      <section class="card glass chat" aria-labelledby="chat-title">
+        <h2 id="chat-title">2) Chat with your PDF</h2>
+        <div id="chatlog" class="chatlog" aria-live="polite"></div>
+
+        <div class="composer">
+          <input
+            type="text"
+            id="userInput"
+            placeholder="Type your question and press Enter…"
+            aria-label="Ask a question"
+          />
+          <button id="sendBtn" class="btn solid">Send</button>
+        </div>
+        <p class="tiny muted">Tip: press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for a new line.</p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p class="tiny muted">Built with Flask + Gemini + Pinecone • Lightweight & Render-friendly</p>
+    </footer>
+  </div>
+
+  <template id="msg-user">
+    <div class="msg user">
+      <div class="avatar">🧑</div>
+      <div class="bubble"></div>
+    </div>
+  </template>
+
+  <template id="msg-bot">
+    <div class="msg bot">
+      <div class="avatar">🤖</div>
+      <div class="bubble"></div>
+    </div>
+  </template>
+
+  <template id="msg-typing">
+    <div class="msg bot">
+      <div class="avatar">🤖</div>
+      <div class="bubble typing">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    // ---------- Helpers ----------
+    const qs = (s, r = document) => r.querySelector(s);
+    const qsa = (s, r = document) => [...r.querySelectorAll(s)];
+    const chatlog = qs("#chatlog");
+    const userInput = qs("#userInput");
+    const sendBtn = qs("#sendBtn");
+    const uploadBtn = qs("#uploadBtn");
+    const uploadStatus = qs("#uploadStatus");
+    const dropzone = qs("#dropzone");
+    const fileInput = qs("#fileInput");
+    const dzText = qs("#dzText");
+    const healthCheck = qs("#healthCheck");
+
+    const appendMsg = (tplId, text) => {
+      const tpl = qs(tplId);
+      const node = tpl.content.cloneNode(true);
+      node.querySelector(".bubble").innerText = text;
+      chatlog.appendChild(node);
+      chatlog.scrollTop = chatlog.scrollHeight;
+    };
+
+    const appendTyping = () => {
+      const tpl = qs("#msg-typing");
+      const node = tpl.content.cloneNode(true);
+      node.firstElementChild.dataset.typing = "true";
+      chatlog.appendChild(node);
+      chatlog.scrollTop = chatlog.scrollHeight;
+    };
+
+    const removeTyping = () => {
+      const typing = qsa('.msg.bot[data-typing="true"]', chatlog);
+      typing.forEach(t => t.remove());
+    };
+
+    // ---------- Upload ----------
+    const setFile = (file) => {
+      if (!file) return;
+      if (file.type !== "application/pdf") {
+        dzText.textContent = "Please choose a PDF file.";
+        uploadBtn.disabled = true;
+        return;
+      }
+      dzText.textContent = `Selected: ${file.name}`;
+      uploadBtn.disabled = false;
+    };
+
+    dropzone.addEventListener("click", () => fileInput.click());
+    dropzone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") fileInput.click(); });
+
+    ["dragenter", "dragover"].forEach(evt =>
+      dropzone.addEventListener(evt, e => {
+        e.preventDefault(); e.stopPropagation();
+        dropzone.classList.add("hover");
+      })
+    );
+    ["dragleave", "drop"].forEach(evt =>
+      dropzone.addEventListener(evt, e => {
+        e.preventDefault(); e.stopPropagation();
+        dropzone.classList.remove("hover");
+      })
+    );
+    dropzone.addEventListener("drop", (e) => {
+      const file = e.dataTransfer.files?.[0];
+      fileInput.files = e.dataTransfer.files;
+      setFile(file);
+    });
+    fileInput.addEventListener("change", (e) => setFile(e.target.files[0]));
+
+    uploadBtn.addEventListener("click", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = "Uploading…";
+      uploadStatus.textContent = "";
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (res.ok) {
+          uploadStatus.textContent = data.message || "Uploaded!";
+          uploadStatus.className = "status ok";
+        } else {
+          uploadStatus.textContent = data.error || "Upload failed.";
+          uploadStatus.className = "status err";
+        }
+      } catch (e) {
+        uploadStatus.textContent = "Network error. Try again.";
+        uploadStatus.className = "status err";
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = "Upload";
+      }
+    });
+
+    // ---------- Chat ----------
+    const send = async () => {
+      const text = userInput.value.trim();
+      if (!text) return;
+      appendMsg("#msg-user", text);
+      userInput.value = "";
+      userInput.focus();
+
+      sendBtn.disabled = true;
+      appendTyping();
+
+      try {
+        const res = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: text }),
+        });
+        const data = await res.json();
+        removeTyping();
+        appendMsg("#msg-bot", data.answer || data.error || "Sorry, something went wrong.");
+      } catch {
+        removeTyping();
+        appendMsg("#msg-bot", "Network error. Please try again.");
+      } finally {
+        sendBtn.disabled = false;
+      }
+    };
+
+    sendBtn.addEventListener("click", send);
+    userInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    // ---------- Health ----------
+    healthCheck.addEventListener("click", async (e) => {
+      e.preventDefault();
+      try {
+        const res = await fetch("/health");
+        alert(res.ok ? "Health: OK" : "Health: failed");
+      } catch {
+        alert("Health: network error");
+      }
+    });
+  </script>
+</body>
 </html>
+
